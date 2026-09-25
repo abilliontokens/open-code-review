@@ -66,6 +66,34 @@ ocr config set providers.anthropic.api_key sk-ant-xxxxxxxxxx
 | `xai` | openai | `https://api.x.ai/v1` | `XAI_API_KEY` |
 | `opencode-go` | openai | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` |
 
+### 여러 API 키 {#multiple-api-keys}
+
+`api_keys`에는 같은 프로바이더의 추가 키를 나열합니다. 요청이 사용량 한도(HTTP 429, 또는 잔액 소진 시 402)에 걸리면 OCR은 다음 키로 즉시 다시 보내고, 이번 실행의 이후 요청도 그 키부터 시작합니다. 모든 키가 한도에 걸리면 일반적인 백오프 재시도로 넘어갑니다. 키가 거부된 401 같은 다른 오류에서는 키를 바꾸지 않습니다.
+
+```bash
+ocr config set providers.opencode-go.api_keys "$KEY_1,$KEY_2,$KEY_3"
+```
+
+`api_key`가 설정되어 있으면 가장 먼저 사용하고, 이어서 `api_keys`를 순서대로 사용합니다. `api_keys`는 내장 프로바이더와 사용자 정의 프로바이더 모두에서 동작합니다.
+
+### OpenCode Go {#opencode-go}
+
+[OpenCode Go](https://opencode.ai/docs/go/)는 모델별로 5시간·주간·월간 사용량 한도가 있는 구독이므로 여러 키와 잘 맞습니다:
+
+```bash
+ocr config set provider                         opencode-go
+ocr config set model                            deepseek-v4.1-flash
+ocr config set providers.opencode-go.api_keys   "$GO_KEY_1,$GO_KEY_2"
+```
+
+OCR은 리뷰의 세션 ID를 `x-opencode-session`으로 보내며, Go는 이를 라우팅과 프롬프트 캐싱에 사용합니다. 프리셋은 Chat Completions를 사용합니다. Go가 Messages API(MiniMax, Qwen)나 Responses API(Grok, GPT, Muse Spark)로 제공하는 모델은 프로토콜을 바꾸고 모델을 목록에 추가해야 합니다:
+
+```bash
+ocr config set providers.opencode-go.protocol anthropic
+ocr config set providers.opencode-go.models   qwen3.8-max
+ocr config set model                          qwen3.8-max
+```
+
 ### 내장 프로바이더의 Base URL 재정의 {#overriding-a-built-in-provider-s-base-url}
 
 모든 내장 프로바이더에는 미리 설정된 Base URL이 있습니다(위 표 참고). 내장 프로바이더를 다른 엔드포인트로 보내려면 `providers.<name>.url`을 설정합니다(예: 자체 호스팅 LiteLLM 게이트웨이는 미리 설정된 기본값 `http://localhost:4000/v1`에 있는 경우가 드뭅니다):

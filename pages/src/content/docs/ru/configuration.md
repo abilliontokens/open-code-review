@@ -73,6 +73,34 @@ API-ключ. Если `providers.<name>.api_key` не задан, OCR испо�
 | `xai` | openai | `https://api.x.ai/v1` | `XAI_API_KEY` |
 | `opencode-go` | openai | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` |
 
+### Несколько API-ключей
+
+`api_keys` перечисляет дополнительные ключи того же провайдера. Когда запрос упирается в лимит использования (HTTP 429 или 402 при исчерпанном балансе), OCR сразу отправляет его повторно со следующим ключом, и остальные запросы этого запуска тоже начинаются с него. Если лимит исчерпан на всех ключах, в дело вступает обычный повтор с задержкой. Другие ошибки, например 401 для отклонённого ключа, ключ не переключают.
+
+```bash
+ocr config set providers.opencode-go.api_keys "$KEY_1,$KEY_2,$KEY_3"
+```
+
+Если задан `api_key`, он используется первым, затем по порядку `api_keys`. `api_keys` работает как для встроенных, так и для пользовательских провайдеров.
+
+### OpenCode Go
+
+[OpenCode Go](https://opencode.ai/docs/go/) — подписка с 5-часовыми, недельными и месячными лимитами для каждой модели, поэтому для неё удобно задать несколько ключей:
+
+```bash
+ocr config set provider                         opencode-go
+ocr config set model                            deepseek-v4.1-flash
+ocr config set providers.opencode-go.api_keys   "$GO_KEY_1,$GO_KEY_2"
+```
+
+OCR передаёт идентификатор сессии ревью в `x-opencode-session`, который Go использует для маршрутизации и кеширования промптов. Пресет работает по протоколу Chat Completions. Для моделей, которые Go отдаёт через Messages API (MiniMax, Qwen) или Responses API (Grok, GPT, Muse Spark), нужно сменить протокол и добавить модель в список:
+
+```bash
+ocr config set providers.opencode-go.protocol anthropic
+ocr config set providers.opencode-go.models   qwen3.8-max
+ocr config set model                          qwen3.8-max
+```
+
 ### Переопределение Base URL встроенного провайдера
 
 У каждого встроенного провайдера есть предустановленный Base URL

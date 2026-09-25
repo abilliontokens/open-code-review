@@ -70,6 +70,44 @@ environment variable.
 | `xai` | openai | `https://api.x.ai/v1` | `XAI_API_KEY` |
 | `opencode-go` | openai | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` |
 
+### Multiple API keys
+
+`api_keys` lists further keys for the same provider. When a request hits a
+usage limit (HTTP 429, or 402 for an exhausted balance), OCR sends it again
+at once with the next key, and the rest of the run carries on from that key.
+When every key is limited, the usual retry with backoff takes over. Other
+errors, such as a 401 for a rejected key, do not switch keys.
+
+```bash
+ocr config set providers.opencode-go.api_keys "$KEY_1,$KEY_2,$KEY_3"
+```
+
+`api_key`, when set, is tried first, followed by `api_keys` in order.
+`api_keys` works on built-in and custom providers alike.
+
+### OpenCode Go
+
+[OpenCode Go](https://opencode.ai/docs/go/) is a subscription with 5-hour,
+weekly and monthly usage limits per model, which makes it a natural fit for
+several keys:
+
+```bash
+ocr config set provider                         opencode-go
+ocr config set model                            deepseek-v4.1-flash
+ocr config set providers.opencode-go.api_keys   "$GO_KEY_1,$GO_KEY_2"
+```
+
+OCR sends the review's session ID in `x-opencode-session`, which Go uses for
+routing and prompt caching. The preset speaks Chat Completions. Models that Go
+serves over the Messages API (MiniMax, Qwen) or the Responses API (Grok, GPT,
+Muse Spark) need the protocol switched and the model added to the list:
+
+```bash
+ocr config set providers.opencode-go.protocol anthropic
+ocr config set providers.opencode-go.models   qwen3.8-max
+ocr config set model                          qwen3.8-max
+```
+
 ### Overriding a built-in provider's Base URL
 
 Every built-in provider has a preset Base URL (shown in the table above).

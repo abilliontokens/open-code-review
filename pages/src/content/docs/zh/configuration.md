@@ -67,6 +67,34 @@ ocr config set providers.anthropic.api_key sk-ant-xxxxxxxxxx
 | `xai` | openai | `https://api.x.ai/v1` | `XAI_API_KEY` |
 | `opencode-go` | openai | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` |
 
+### 多个 API key
+
+`api_keys` 为同一个 provider 列出更多 key。当请求触发用量限制（HTTP 429，或余额耗尽时的 402）时，OCR 会立即用下一个 key 重新发送该请求，本次运行后续的请求也从该 key 开始。所有 key 都受限时，则回到常规的退避重试。其他错误（例如 key 被拒绝的 401）不会切换 key。
+
+```bash
+ocr config set providers.opencode-go.api_keys "$KEY_1,$KEY_2,$KEY_3"
+```
+
+若设置了 `api_key`，它会最先使用，然后按顺序使用 `api_keys`。`api_keys` 对内置和自定义 provider 均有效。
+
+### OpenCode Go
+
+[OpenCode Go](https://opencode.ai/docs/go/) 是按模型设有 5 小时、每周和每月用量限制的订阅，因此很适合配置多个 key：
+
+```bash
+ocr config set provider                         opencode-go
+ocr config set model                            deepseek-v4.1-flash
+ocr config set providers.opencode-go.api_keys   "$GO_KEY_1,$GO_KEY_2"
+```
+
+OCR 会在 `x-opencode-session` 中发送本次审查的会话 ID，Go 用它进行路由和提示词缓存。该预设使用 Chat Completions 协议。Go 通过 Messages API（MiniMax、Qwen）或 Responses API（Grok、GPT、Muse Spark）提供的模型，需要切换协议并把模型加入列表：
+
+```bash
+ocr config set providers.opencode-go.protocol anthropic
+ocr config set providers.opencode-go.models   qwen3.8-max
+ocr config set model                          qwen3.8-max
+```
+
 ### 覆盖内置 provider 的 Base URL
 
 每个内置 provider 都有一个预设 Base URL（见上表）。要将内置 provider

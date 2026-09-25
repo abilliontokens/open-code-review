@@ -68,6 +68,34 @@ ocr config set providers.anthropic.api_key sk-ant-xxxxxxxxxx
 | `xai` | openai | `https://api.x.ai/v1` | `XAI_API_KEY` |
 | `opencode-go` | openai | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` |
 
+### 複数の API キー
+
+`api_keys` には同じ provider の追加キーを列挙します。リクエストが利用上限（HTTP 429、または残高不足の 402）に達すると、OCR は次のキーで直ちに再送信し、その実行の以降のリクエストもそのキーから始めます。すべてのキーが上限に達した場合は、通常のバックオフ付きリトライに移ります。キーが拒否された 401 など、その他のエラーではキーを切り替えません。
+
+```bash
+ocr config set providers.opencode-go.api_keys "$KEY_1,$KEY_2,$KEY_3"
+```
+
+`api_key` が設定されていればそれを最初に使い、続いて `api_keys` を順に使います。`api_keys` は組み込み provider とカスタム provider の両方で使えます。
+
+### OpenCode Go
+
+[OpenCode Go](https://opencode.ai/docs/go/) はモデルごとに 5 時間・週・月の利用上限があるサブスクリプションなので、複数キーとの相性が良好です：
+
+```bash
+ocr config set provider                         opencode-go
+ocr config set model                            deepseek-v4.1-flash
+ocr config set providers.opencode-go.api_keys   "$GO_KEY_1,$GO_KEY_2"
+```
+
+OCR はレビューのセッション ID を `x-opencode-session` で送信し、Go はこれをルーティングとプロンプトキャッシュに使います。プリセットは Chat Completions を使います。Go が Messages API（MiniMax、Qwen）や Responses API（Grok、GPT、Muse Spark）で提供するモデルは、プロトコルを切り替え、モデルをリストに追加してください：
+
+```bash
+ocr config set providers.opencode-go.protocol anthropic
+ocr config set providers.opencode-go.models   qwen3.8-max
+ocr config set model                          qwen3.8-max
+```
+
 ### 組み込み provider の Base URL を上書きする
 
 各組み込み provider にはプリセット Base URL があります（上表を参照）。
