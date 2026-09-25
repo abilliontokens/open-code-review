@@ -4,6 +4,7 @@
 package llm
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -23,19 +24,19 @@ func TestResolveEndpoint_OpenCodeGoPresetHeaders(t *testing.T) {
 		if ep.URL != "https://opencode.ai/zen/go/v1" || ep.Protocol != ProtocolOpenAIChatCompletions {
 			t.Errorf("endpoint = %s %s, want the Go chat completions endpoint", ep.Protocol, ep.URL)
 		}
-		if got := ep.ExtraHeaders["x-opencode-session"]; got != SessionKeyTemplateVar {
+		if got := wireHeaders(ep.ExtraHeaders).Get("x-opencode-session"); got != SessionKeyTemplateVar {
 			t.Errorf("x-opencode-session = %q, want %q", got, SessionKeyTemplateVar)
 		}
 	})
 
-	t.Run("entry headers override the preset and keep the rest", func(t *testing.T) {
+	t.Run("entry headers override the preset whatever their case", func(t *testing.T) {
 		path, _ := writeResolverConfig(t, configFile{
 			Provider: "opencode-go",
 			Providers: map[string]providerEntryConfig{"opencode-go": {
 				APIKey: "sk-go",
 				Model:  "kimi-k3",
 				ExtraHeaders: map[string]string{
-					"x-opencode-session": "fixed",
+					"X-OpenCode-Session": "fixed",
 					"x-team":             "review",
 				},
 			}},
@@ -44,13 +45,26 @@ func TestResolveEndpoint_OpenCodeGoPresetHeaders(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ResolveEndpoint: %v", err)
 		}
-		if ep.ExtraHeaders["x-opencode-session"] != "fixed" || ep.ExtraHeaders["x-team"] != "review" {
-			t.Errorf("ExtraHeaders = %v, want entry values to win", ep.ExtraHeaders)
+		// Two spellings of one header would race in map order when the
+		// client applies them, so the merge must leave exactly one.
+		h := wireHeaders(ep.ExtraHeaders)
+		if got := h.Values("x-opencode-session"); len(got) != 1 || got[0] != "fixed" || h.Get("x-team") != "review" {
+			t.Errorf("ExtraHeaders = %v, want one session header holding the entry value", ep.ExtraHeaders)
 		}
 		if p, _ := LookupProvider("opencode-go"); p.ExtraHeaders["x-opencode-session"] != SessionKeyTemplateVar {
 			t.Error("resolving mutated the registry's preset headers")
 		}
 	})
+}
+
+// wireHeaders applies m with Add rather than the clients' Set, so a header name
+// the merge left duplicated shows up as two values instead of racing.
+func wireHeaders(m map[string]string) http.Header {
+	h := http.Header{}
+	for k, v := range m {
+		h.Add(k, v)
+	}
+	return h
 }
 
 func TestResolveEndpoint_OpenCodeGoRoutesProtocolByModel(t *testing.T) {

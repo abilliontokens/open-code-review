@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"net/http"
 	neturl "net/url"
 	"os"
 	"path/filepath"
@@ -607,11 +608,7 @@ func tryProviderConfig(cfg configFile, modelOverride string) (ResolvedEndpoint, 
 	extraBody = entry.ExtraBody
 	extraHeaders := entry.ExtraHeaders
 	if isPreset && len(preset.ExtraHeaders) > 0 {
-		merged := preset.ExtraHeaders
-		for k, v := range entry.ExtraHeaders {
-			merged[k] = v
-		}
-		extraHeaders = merged
+		extraHeaders = mergeHeaders(preset.ExtraHeaders, entry.ExtraHeaders)
 	}
 
 	timeout, err := ValidateTimeoutSec(entry.TimeoutSec)
@@ -648,6 +645,10 @@ func tryProviderConfig(cfg configFile, modelOverride string) (ResolvedEndpoint, 
 	if ambientAuth || len(fallbackTokens) == 0 {
 		fallbackTokens = nil
 	}
+	if total := len(fallbackTokens) + 1; total > sdkMaxRetries+1 {
+		fmt.Fprintf(os.Stderr, "[ocr] WARNING: provider %q has %d API keys, but one request makes at most %d attempts; keys past the %dth are only reached by later requests\n",
+			cfg.Provider, total, sdkMaxRetries+1, sdkMaxRetries+1)
+	}
 	return ResolvedEndpoint{
 		URL:            url,
 		Token:          apiKey,
@@ -665,6 +666,21 @@ func tryProviderConfig(cfg configFile, modelOverride string) (ResolvedEndpoint, 
 		AWSProfile:     entry.AWSProfile,
 		AWSRegion:      entry.AWSRegion,
 	}, true, nil
+}
+
+// mergeHeaders layers overrides on top of base. HTTP header names are
+// case-insensitive, and the clients apply the map with http.Header.Set, so an
+// override spelled differently from the base name must replace it rather than
+// sit beside it and race it in map iteration order.
+func mergeHeaders(base, overrides map[string]string) map[string]string {
+	merged := make(map[string]string, len(base)+len(overrides))
+	for k, v := range base {
+		merged[http.CanonicalHeaderKey(k)] = v
+	}
+	for k, v := range overrides {
+		merged[http.CanonicalHeaderKey(k)] = v
+	}
+	return merged
 }
 
 // collectFallbackKeys returns the api_keys entries that add a key beyond

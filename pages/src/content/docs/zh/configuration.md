@@ -37,7 +37,7 @@ ocr config set providers.anthropic.api_key sk-ant-xxxxxxxxxx
 ### 内置 provider
 
 下列 provider 随 OCR 发布，已预置 Base URL 与协议，选中后只需填 API key。
-若 `providers.<name>.api_key` 未设置，会自动回退到对应的环境变量。
+若 `providers.<name>.api_key`、`api_keys` 和 `api_key_cmd` 均未设置，会自动回退到对应的环境变量。
 
 | 名称 | 协议 | Base URL | API key 环境变量 |
 |---|---|---|---|
@@ -69,7 +69,9 @@ ocr config set providers.anthropic.api_key sk-ant-xxxxxxxxxx
 
 ### 多个 API key
 
-`api_keys` 为同一个 provider 列出更多 key。当请求收到用量限制响应（HTTP 429，或余额耗尽时的 402）时，经过常规的重试退避后，下一次尝试会使用下一个 key，本次运行后续的请求也从该 key 开始。故障切换不会增加请求数：它只改变每次重试使用的 key，不改变重试次数。其他错误（例如 key 被拒绝的 401）不会切换 key。
+`api_keys` 为同一个 provider 列出更多 key。当请求收到用量限制响应（HTTP 429，或余额耗尽时的 402）时，下一次重试会使用下一个 key，本次运行后续的请求也从该 key 开始。超过 8 秒的 `Retry-After` 表示受限 key 的重置时间，因此切换到下一个 key 前不会等待这段时间。其他错误（例如 key 被拒绝的 401）不会切换 key。
+
+故障切换在每个请求 6 次尝试的常规重试预算内进行。对本来就会重试的 429，不会增加请求。402 通常会直接结束请求；配置了 `api_keys` 时，它会在该预算内用下一个 key 重试。因此单个请求最多尝试 6 个 key，第 6 个之后的 key 只会被后续请求使用。
 
 仅在允许使用多个 key 且按 key 单独限额的 provider 上使用。针对整个账号或 IP 的 429 无法靠换 key 避开。
 
@@ -77,7 +79,7 @@ ocr config set providers.anthropic.api_key sk-ant-xxxxxxxxxx
 ocr config set providers.my-gateway.api_keys "$KEY_1,$KEY_2,$KEY_3"
 ```
 
-最先使用的 key 是 `api_key`，若改为设置了 `api_key_cmd` 则是其输出，之后按顺序使用 `api_keys`。两者都未设置时，`api_keys` 的第一项作为首个 key。`api_keys` 对内置和自定义 provider 均有效。
+最先使用的 key 是 `api_key`，若改为设置了 `api_key_cmd` 则是其输出，之后按顺序使用 `api_keys`。两者都未设置时，`api_keys` 的第一项作为首个 key，且不再使用 provider 的环境变量。`api_keys` 对内置和自定义 provider 均有效。
 
 ### OpenCode Go
 
@@ -248,7 +250,7 @@ ocr config set providers.anthropic.api_key_cmd \
 ```
 
 优先级：静态 `api_key` 始终优先（两者都设置时忽略命令并打印警告）；否则运行
-`api_key_cmd`；只有两者都未设置时，OCR 才回退到 provider 对应的环境变量。
+`api_key_cmd`；再否则使用 `api_keys` 的第一项；只有以上都未设置时，OCR 才回退到 provider 对应的环境变量。
 
 命令在每次 `ocr` 调用时运行一次，且必须成功：非零退出、空输出、多行输出或超过
 64KiB 的输出都会被视为硬错误（OCR 绝不会静默回退）。命令须在 60 秒内完成，这也

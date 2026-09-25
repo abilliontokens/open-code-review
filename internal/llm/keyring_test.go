@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 const chatCompletionOK = `{"id":"c1","object":"chat.completion","created":1,"model":"m",
@@ -21,13 +22,14 @@ const chatCompletionOK = `{"id":"c1","object":"chat.completion","created":1,"mod
 // status, every other key gets ok. It records the key and body of every
 // request in arrival order.
 type keyServer struct {
-	mu      sync.Mutex
-	keys    []string
-	bodies  []string
-	limited map[string]bool
-	status  int
-	ok      string
-	keyOf   func(*http.Request) string
+	mu         sync.Mutex
+	keys       []string
+	bodies     []string
+	limited    map[string]bool
+	status     int
+	retryAfter string // Retry-After on limited responses; empty sends retry-after-ms: 1
+	ok         string
+	keyOf      func(*http.Request) string
 }
 
 func (s *keyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +40,11 @@ func (s *keyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.bodies = append(s.bodies, string(body))
 	s.mu.Unlock()
 	if s.limited[key] {
-		w.Header().Set("retry-after-ms", "1")
+		if s.retryAfter != "" {
+			w.Header().Set("Retry-After", s.retryAfter)
+		} else {
+			w.Header().Set("retry-after-ms", "1")
+		}
 		w.WriteHeader(s.status)
 		_, _ = w.Write([]byte(`{"error":{"message":"usage limit reached"}}`))
 		return
@@ -83,29 +89,51 @@ func TestKeyFailover_SwitchesOnLimitAndStaysOnNextKey(t *testing.T) {
 	}
 }
 
-func TestKeyFailover_AllKeysLimitedFallsBackToSDKRetries(t *testing.T) {
-	srv := &keyServer{limited: map[string]bool{"k1": true, "k2": true}, status: http.StatusTooManyRequests, ok: chatCompletionOK, keyOf: bearerKey}
+func TestKeyFailover_AllKeysLimitedStaysWithinSDKRetryBudget(t *testing.T) {
+	// 429 is retried by the SDK anyway; 402 is made retryable by the
+	// middleware. Either way the SDK's budget of 1 + sdkMaxRetries attempts
+	// bounds the request, and the keys alternate across those attempts.
+	for _, status := range []int{http.StatusTooManyRequests, http.StatusPaymentRequired} {
+		srv := &keyServer{limited: map[string]bool{"k1": true, "k2": true}, status: status, ok: chatCompletionOK, keyOf: bearerKey}
+		server := httptest.NewServer(srv)
+		client := NewOpenAIClient(ClientConfig{URL: server.URL, APIKey: "k1", FallbackAPIKeys: []string{"k2"}, Model: "m"})
+
+		if err := sendPing(t, client); err == nil {
+			t.Fatalf("status %d: expected an error when every key is limited", status)
+		}
+		server.Close()
+		var k1, k2 int
+		for _, k := range srv.keys {
+			switch k {
+			case "k1":
+				k1++
+			case "k2":
+				k2++
+			}
+		}
+		if len(srv.keys) != sdkMaxRetries+1 || k1 != 3 || k2 != 3 {
+			t.Errorf("status %d: keys sent = %v, want %d attempts alternating k1/k2", status, srv.keys, sdkMaxRetries+1)
+		}
+	}
+}
+
+// A usage-limit 429 carries the exhausted key's reset interval (OpenCode Go
+// sends hours). Honouring it before switching keys would time the request out
+// before the healthy key is ever sent.
+func TestKeyFailover_LongRetryAfterDoesNotBlockNextKey(t *testing.T) {
+	srv := &keyServer{limited: map[string]bool{"k1": true}, status: http.StatusTooManyRequests, retryAfter: "900", ok: chatCompletionOK, keyOf: bearerKey}
 	server := httptest.NewServer(srv)
 	defer server.Close()
 	client := NewOpenAIClient(ClientConfig{URL: server.URL, APIKey: "k1", FallbackAPIKeys: []string{"k2"}, Model: "m"})
 
-	if err := sendPing(t, client); err == nil {
-		t.Fatal("expected an error when every key is limited")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := client.CompletionsWithCtx(ctx, ChatRequest{Messages: []Message{{Role: "user", Content: "ping"}}, MaxTokens: 16})
+	if err != nil {
+		t.Fatalf("CompletionsWithCtx: %v (keys sent %v)", err, srv.keys)
 	}
-	var k1, k2 int
-	for _, k := range srv.keys {
-		switch k {
-		case "k1":
-			k1++
-		case "k2":
-			k2++
-		}
-	}
-	// Failover must not multiply requests when the limit is not per key: the
-	// SDK's own budget (1 attempt + 5 retries) bounds the total, and the keys
-	// alternate across those attempts.
-	if len(srv.keys) != 6 || k1 != 3 || k2 != 3 {
-		t.Errorf("keys sent = %v, want 6 attempts alternating k1/k2", srv.keys)
+	if got := strings.Join(srv.keys, ","); got != "k1,k2" {
+		t.Errorf("keys sent = %s, want k1,k2", got)
 	}
 }
 

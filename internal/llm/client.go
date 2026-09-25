@@ -558,7 +558,7 @@ func NewOpenAIClient(cfg ClientConfig) *OpenAIClient {
 	opts := []openaiopt.RequestOption{
 		openaiopt.WithAPIKey(cfg.APIKey),
 		openaiopt.WithBaseURL(sdkBaseURL),
-		openaiopt.WithMaxRetries(5),
+		openaiopt.WithMaxRetries(sdkMaxRetries),
 		openaiopt.WithHeader("User-Agent", userAgent("")),
 		openaiopt.WithRequestTimeout(cfg.Timeout),
 		openaiopt.WithHTTPClient(httpClientWithHeaderTimeout(cfg.Timeout)),
@@ -1133,7 +1133,7 @@ func NewAnthropicClient(cfg ClientConfig) *AnthropicClient {
 
 	opts := []option.RequestOption{
 		option.WithBaseURL(sdkBaseURL),
-		option.WithMaxRetries(5),
+		option.WithMaxRetries(sdkMaxRetries),
 		option.WithHeader("User-Agent", userAgent("claude")),
 		option.WithRequestTimeout(cfg.Timeout),
 		// anthropic-sdk-go's default client hardcodes the same 10-minute
@@ -1201,7 +1201,7 @@ func NewAnthropicBedrockClient(cfg ClientConfig) *AnthropicClient {
 	// would be overwritten rather than honoured. A custom endpoint (a VPC
 	// endpoint, say) would need to be threaded through the AWS config instead.
 	opts := []option.RequestOption{
-		option.WithMaxRetries(5),
+		option.WithMaxRetries(sdkMaxRetries),
 		option.WithHeader("User-Agent", userAgent("claude")),
 		option.WithRequestTimeout(cfg.Timeout),
 		// No httpClientWithHeaderTimeout here (unlike NewAnthropicClient): bedrock.WithConfig
