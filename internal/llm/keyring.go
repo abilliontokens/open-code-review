@@ -5,7 +5,6 @@ package llm
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"sync"
@@ -58,15 +57,18 @@ func keyFailoverFor(cfg ClientConfig, authHeader string) func(*http.Request, fun
 	return keyFailoverMiddleware(keys, authHeader)
 }
 
-// keyFailoverMiddleware sends each HTTP attempt with the ring's current key
-// and, when the provider answers with a key limit status, re-sends it at once
-// with the next key, trying each key at most once per attempt. When every key
-// is limited the last response goes back to the SDK, whose own retry loop then
-// backs off and comes through here again.
+// keyFailoverMiddleware sends each HTTP attempt with the ring's current key.
+// When the provider answers with a key limit status it rotates the ring and
+// hands the response back to the SDK, whose retry loop backs off (honouring
+// retry-after) and sends the next attempt with the next key. Failover never
+// adds requests: a 429 that is really account-, IP- or model-wide costs
+// exactly the attempts it would have cost without extra keys.
 //
-// It must be registered before every other middleware so that it is the
-// outermost: each re-send then passes through the retry observer and the raw
-// capture like any other attempt.
+// The SDKs do not retry 402, so it is marked retryable here; the retry then
+// goes out on the next key.
+//
+// It must be registered before the retry observer and raw capture, so both
+// see the auth header this middleware sets.
 //
 // authHeader is the header the key travels in: "authorization" (sent as a
 // Bearer token) or the name of a header carrying the bare key.
@@ -74,32 +76,18 @@ func keyFailoverMiddleware(keys []string, authHeader string) func(*http.Request,
 	ring := &keyRing{keys: keys}
 	return func(req *http.Request, next func(*http.Request) (*http.Response, error)) (*http.Response, error) {
 		idx, key := ring.current()
-		for tried := 1; ; tried++ {
-			setAuthKey(req, authHeader, key)
-			resp, err := next(req)
-			if err != nil || !isKeyLimitStatus(resp.StatusCode) || tried >= len(keys) {
-				return resp, err
-			}
-			retry := req.Clone(req.Context())
-			if req.Body != nil && req.Body != http.NoBody {
-				if req.GetBody == nil {
-					return resp, err
-				}
-				body, bodyErr := req.GetBody()
-				if bodyErr != nil {
-					return resp, err
-				}
-				retry.Body = body
-			}
-			_, _ = io.Copy(io.Discard, resp.Body)
-			_ = resp.Body.Close()
-
-			limited := idx
-			idx, key = ring.rotate(idx)
-			fmt.Fprintf(os.Stderr, "[ocr] WARNING: API key %d of %d hit a usage limit (HTTP %d); switching to key %d\n",
-				limited+1, len(keys), resp.StatusCode, idx+1)
-			req = retry
+		setAuthKey(req, authHeader, key)
+		resp, err := next(req)
+		if err != nil || !isKeyLimitStatus(resp.StatusCode) {
+			return resp, err
 		}
+		nextIdx, _ := ring.rotate(idx)
+		if resp.StatusCode == http.StatusPaymentRequired {
+			resp.Header.Set("x-should-retry", "true")
+		}
+		fmt.Fprintf(os.Stderr, "[ocr] WARNING: API key %d of %d hit a usage limit (HTTP %d); the next attempt uses key %d\n",
+			idx+1, len(keys), resp.StatusCode, nextIdx+1)
+		return resp, err
 	}
 }
 

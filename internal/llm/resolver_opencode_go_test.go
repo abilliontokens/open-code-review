@@ -181,3 +181,20 @@ func TestResolveEndpoint_APIKeysDoNotShadowAPIKeyCmd(t *testing.T) {
 		t.Fatalf("resolved with token %q, want the api_key_cmd failure", ep.Token)
 	}
 }
+
+func TestResolveEndpoint_APIKeysDedupAgainstAPIKeyCmdOutput(t *testing.T) {
+	clearAllEnv(t)
+	path, _ := writeResolverConfig(t, configFile{
+		Provider: "opencode-go",
+		Providers: map[string]providerEntryConfig{"opencode-go": {
+			APIKeyCmd: "echo k1", APIKeys: []string{"k1", "k2"}, Model: "kimi-k3",
+		}},
+	})
+	ep, err := ResolveEndpoint(path)
+	if err != nil {
+		t.Fatalf("ResolveEndpoint: %v", err)
+	}
+	if ep.Token != "k1" || strings.Join(ep.FallbackTokens, ",") != "k2" {
+		t.Errorf("keys = %q + %q, want k1 + [k2]", ep.Token, ep.FallbackTokens)
+	}
+}

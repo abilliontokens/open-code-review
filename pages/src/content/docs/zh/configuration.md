@@ -69,22 +69,24 @@ ocr config set providers.anthropic.api_key sk-ant-xxxxxxxxxx
 
 ### 多个 API key
 
-`api_keys` 为同一个 provider 列出更多 key。当请求触发用量限制（HTTP 429，或余额耗尽时的 402）时，OCR 会立即用下一个 key 重新发送该请求，本次运行后续的请求也从该 key 开始。所有 key 都受限时，则回到常规的退避重试。其他错误（例如 key 被拒绝的 401）不会切换 key。
+`api_keys` 为同一个 provider 列出更多 key。当请求收到用量限制响应（HTTP 429，或余额耗尽时的 402）时，经过常规的重试退避后，下一次尝试会使用下一个 key，本次运行后续的请求也从该 key 开始。故障切换不会增加请求数：它只改变每次重试使用的 key，不改变重试次数。其他错误（例如 key 被拒绝的 401）不会切换 key。
+
+仅在允许使用多个 key 且按 key 单独限额的 provider 上使用。针对整个账号或 IP 的 429 无法靠换 key 避开。
 
 ```bash
-ocr config set providers.opencode-go.api_keys "$KEY_1,$KEY_2,$KEY_3"
+ocr config set providers.my-gateway.api_keys "$KEY_1,$KEY_2,$KEY_3"
 ```
 
 最先使用的 key 是 `api_key`，若改为设置了 `api_key_cmd` 则是其输出，之后按顺序使用 `api_keys`。两者都未设置时，`api_keys` 的第一项作为首个 key。`api_keys` 对内置和自定义 provider 均有效。
 
 ### OpenCode Go
 
-[OpenCode Go](https://opencode.ai/docs/go/) 是按模型设有 5 小时、每周和每月用量限制的订阅，因此很适合配置多个 key：
+[OpenCode Go](https://opencode.ai/docs/go/) 是 OpenCode 面向开源编码模型的订阅服务：
 
 ```bash
 ocr config set provider                         opencode-go
 ocr config set model                            deepseek-v4.1-flash
-ocr config set providers.opencode-go.api_keys   "$GO_KEY_1,$GO_KEY_2"
+ocr config set providers.opencode-go.api_key    "$OPENCODE_API_KEY"
 ```
 
 OCR 会在 `x-opencode-session` 中发送本次审查的会话 ID，Go 用它进行路由和提示词缓存。Go 以不同的 API 提供各个模型系列，OCR 会根据模型选择协议：大多数模型使用 Chat Completions，MiniMax 和 Qwen 使用 Messages API，Grok、GPT 和 Muse Spark 使用 Responses API。设置 `providers.opencode-go.protocol` 会让所有模型固定使用该协议。

@@ -72,14 +72,19 @@ environment variable.
 
 ### Multiple API keys
 
-`api_keys` lists further keys for the same provider. When a request hits a
-usage limit (HTTP 429, or 402 for an exhausted balance), OCR sends it again
-at once with the next key, and the rest of the run carries on from that key.
-When every key is limited, the usual retry with backoff takes over. Other
-errors, such as a 401 for a rejected key, do not switch keys.
+`api_keys` lists further keys for the same provider. When a request gets a
+usage-limit response (HTTP 429, or 402 for an exhausted balance), the next
+attempt uses the next key, after the usual retry backoff, and the rest of the
+run carries on from that key. Failover never adds requests: it changes which
+key each retry uses, not how many retries there are. Other errors, such as a
+401 for a rejected key, do not switch keys.
+
+Use it only with a provider that allows several keys and limits each key on
+its own. A 429 that applies to the whole account or IP is not escaped by
+another key.
 
 ```bash
-ocr config set providers.opencode-go.api_keys "$KEY_1,$KEY_2,$KEY_3"
+ocr config set providers.my-gateway.api_keys "$KEY_1,$KEY_2,$KEY_3"
 ```
 
 The primary key is `api_key`, or the output of `api_key_cmd` when that is
@@ -89,14 +94,13 @@ providers alike.
 
 ### OpenCode Go
 
-[OpenCode Go](https://opencode.ai/docs/go/) is a subscription with 5-hour,
-weekly and monthly usage limits per model, which makes it a natural fit for
-several keys:
+[OpenCode Go](https://opencode.ai/docs/go/) is OpenCode's subscription for
+open coding models:
 
 ```bash
 ocr config set provider                         opencode-go
 ocr config set model                            deepseek-v4.1-flash
-ocr config set providers.opencode-go.api_keys   "$GO_KEY_1,$GO_KEY_2"
+ocr config set providers.opencode-go.api_key    "$OPENCODE_API_KEY"
 ```
 
 OCR sends the review's session ID in `x-opencode-session`, which Go uses for

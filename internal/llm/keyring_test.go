@@ -101,10 +101,11 @@ func TestKeyFailover_AllKeysLimitedFallsBackToSDKRetries(t *testing.T) {
 			k2++
 		}
 	}
-	// Each SDK attempt tries both keys once, so neither key is starved and the
-	// SDK's retry budget, not the key count, bounds the request.
-	if k1 < 2 || k1+k2 != len(srv.keys) || k1-k2 > 1 || k2-k1 > 1 {
-		t.Errorf("keys sent = %v, want both keys tried on every SDK attempt", srv.keys)
+	// Failover must not multiply requests when the limit is not per key: the
+	// SDK's own budget (1 attempt + 5 retries) bounds the total, and the keys
+	// alternate across those attempts.
+	if len(srv.keys) != 6 || k1 != 3 || k2 != 3 {
+		t.Errorf("keys sent = %v, want 6 attempts alternating k1/k2", srv.keys)
 	}
 }
 

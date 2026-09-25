@@ -640,6 +640,9 @@ func tryProviderConfig(cfg configFile, modelOverride string) (ResolvedEndpoint, 
 			return ResolvedEndpoint{}, false, err
 		}
 		apiKey = resolved
+		// The command's output is only known now; drop it from the
+		// fallbacks so a limited key is never retried as its own fallback.
+		fallbackTokens = collectFallbackKeys(apiKey, fallbackTokens)
 	}
 
 	if ambientAuth || len(fallbackTokens) == 0 {

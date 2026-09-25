@@ -70,22 +70,24 @@ ocr config set providers.anthropic.api_key sk-ant-xxxxxxxxxx
 
 ### 複数の API キー
 
-`api_keys` には同じ provider の追加キーを列挙します。リクエストが利用上限（HTTP 429、または残高不足の 402）に達すると、OCR は次のキーで直ちに再送信し、その実行の以降のリクエストもそのキーから始めます。すべてのキーが上限に達した場合は、通常のバックオフ付きリトライに移ります。キーが拒否された 401 など、その他のエラーではキーを切り替えません。
+`api_keys` には同じ provider の追加キーを列挙します。リクエストが利用上限の応答（HTTP 429、または残高不足の 402）を受けると、通常のバックオフの後、次の試行では次のキーを使い、その実行の以降のリクエストもそのキーから始めます。フェイルオーバーでリクエスト数が増えることはありません。変わるのは各リトライで使うキーだけで、リトライの回数は変わりません。キーが拒否された 401 など、その他のエラーではキーを切り替えません。
+
+複数のキーを許可し、キーごとに上限を設けている provider でのみ使ってください。アカウント全体や IP 単位の 429 は、別のキーでは回避できません。
 
 ```bash
-ocr config set providers.opencode-go.api_keys "$KEY_1,$KEY_2,$KEY_3"
+ocr config set providers.my-gateway.api_keys "$KEY_1,$KEY_2,$KEY_3"
 ```
 
 最初に使うキーは `api_key`、または代わりに `api_key_cmd` を設定していればその出力で、続いて `api_keys` を順に使います。どちらも未設定なら `api_keys` の先頭が最初のキーになります。`api_keys` は組み込み provider とカスタム provider の両方で使えます。
 
 ### OpenCode Go
 
-[OpenCode Go](https://opencode.ai/docs/go/) はモデルごとに 5 時間・週・月の利用上限があるサブスクリプションなので、複数キーとの相性が良好です：
+[OpenCode Go](https://opencode.ai/docs/go/) は OpenCode が提供するオープンなコーディングモデル向けのサブスクリプションです：
 
 ```bash
 ocr config set provider                         opencode-go
 ocr config set model                            deepseek-v4.1-flash
-ocr config set providers.opencode-go.api_keys   "$GO_KEY_1,$GO_KEY_2"
+ocr config set providers.opencode-go.api_key    "$OPENCODE_API_KEY"
 ```
 
 OCR はレビューのセッション ID を `x-opencode-session` で送信し、Go はこれをルーティングとプロンプトキャッシュに使います。Go はモデルファミリーごとに異なる API で提供しており、OCR はモデルからプロトコルを選びます。多くのモデルは Chat Completions、MiniMax と Qwen は Messages API、Grok・GPT・Muse Spark は Responses API です。`providers.opencode-go.protocol` を設定すると、すべてのモデルでそのプロトコルに固定されます。

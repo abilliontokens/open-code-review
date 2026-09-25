@@ -68,22 +68,24 @@ ocr config set providers.anthropic.api_key sk-ant-xxxxxxxxxx
 
 ### 여러 API 키 {#multiple-api-keys}
 
-`api_keys`에는 같은 프로바이더의 추가 키를 나열합니다. 요청이 사용량 한도(HTTP 429, 또는 잔액 소진 시 402)에 걸리면 OCR은 다음 키로 즉시 다시 보내고, 이번 실행의 이후 요청도 그 키부터 시작합니다. 모든 키가 한도에 걸리면 일반적인 백오프 재시도로 넘어갑니다. 키가 거부된 401 같은 다른 오류에서는 키를 바꾸지 않습니다.
+`api_keys`에는 같은 프로바이더의 추가 키를 나열합니다. 요청이 사용량 한도 응답(HTTP 429, 또는 잔액 소진 시 402)을 받으면 일반적인 재시도 백오프 뒤 다음 시도는 다음 키를 사용하고, 이번 실행의 이후 요청도 그 키부터 시작합니다. 페일오버는 요청 수를 늘리지 않습니다. 각 재시도에 쓰는 키만 바뀌고 재시도 횟수는 그대로입니다. 키가 거부된 401 같은 다른 오류에서는 키를 바꾸지 않습니다.
+
+여러 키를 허용하고 키마다 한도를 따로 두는 프로바이더에서만 사용하세요. 계정 전체나 IP 단위의 429는 다른 키로 피할 수 없습니다.
 
 ```bash
-ocr config set providers.opencode-go.api_keys "$KEY_1,$KEY_2,$KEY_3"
+ocr config set providers.my-gateway.api_keys "$KEY_1,$KEY_2,$KEY_3"
 ```
 
 가장 먼저 사용하는 키는 `api_key`이며, 대신 `api_key_cmd`를 설정했다면 그 출력이고, 이어서 `api_keys`를 순서대로 사용합니다. 둘 다 없으면 `api_keys`의 첫 항목이 첫 키가 됩니다. `api_keys`는 내장 프로바이더와 사용자 정의 프로바이더 모두에서 동작합니다.
 
 ### OpenCode Go {#opencode-go}
 
-[OpenCode Go](https://opencode.ai/docs/go/)는 모델별로 5시간·주간·월간 사용량 한도가 있는 구독이므로 여러 키와 잘 맞습니다:
+[OpenCode Go](https://opencode.ai/docs/go/)는 OpenCode가 제공하는 오픈 코딩 모델 구독입니다:
 
 ```bash
 ocr config set provider                         opencode-go
 ocr config set model                            deepseek-v4.1-flash
-ocr config set providers.opencode-go.api_keys   "$GO_KEY_1,$GO_KEY_2"
+ocr config set providers.opencode-go.api_key    "$OPENCODE_API_KEY"
 ```
 
 OCR은 리뷰의 세션 ID를 `x-opencode-session`으로 보내며, Go는 이를 라우팅과 프롬프트 캐싱에 사용합니다. Go는 모델 계열마다 서로 다른 API로 제공하며, OCR은 모델에 따라 프로토콜을 고릅니다. 대부분은 Chat Completions, MiniMax와 Qwen은 Messages API, Grok·GPT·Muse Spark는 Responses API입니다. `providers.opencode-go.protocol`을 설정하면 모든 모델에 그 프로토콜이 고정됩니다.
