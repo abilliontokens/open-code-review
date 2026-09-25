@@ -76,7 +76,7 @@ ocr config set providers.anthropic.api_key sk-ant-xxxxxxxxxx
 ocr config set providers.opencode-go.api_keys "$KEY_1,$KEY_2,$KEY_3"
 ```
 
-`api_key` が設定されていればそれを最初に使い、続いて `api_keys` を順に使います。`api_keys` は組み込み provider とカスタム provider の両方で使えます。
+最初に使うキーは `api_key`、または代わりに `api_key_cmd` を設定していればその出力で、続いて `api_keys` を順に使います。どちらも未設定なら `api_keys` の先頭が最初のキーになります。`api_keys` は組み込み provider とカスタム provider の両方で使えます。
 
 ### OpenCode Go
 

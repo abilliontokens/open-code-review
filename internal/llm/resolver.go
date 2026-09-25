@@ -429,10 +429,6 @@ func tryProviderConfig(cfg configFile, modelOverride string) (ResolvedEndpoint, 
 	if strings.TrimSpace(apiKey) == "" {
 		apiKey = ""
 	}
-	fallbackTokens := collectFallbackKeys(apiKey, entry.APIKeys)
-	if apiKey == "" && len(fallbackTokens) > 0 {
-		apiKey, fallbackTokens = fallbackTokens[0], fallbackTokens[1:]
-	}
 	// Same rule for the command: `sh -c "   "` exits 0 with no output, so a
 	// whitespace-only api_key_cmd would suppress the env fallback and then fail
 	// with "produced empty output". Treating it as unset keeps the typo from
@@ -440,6 +436,13 @@ func tryProviderConfig(cfg configFile, modelOverride string) (ResolvedEndpoint, 
 	apiKeyCmd := entry.APIKeyCmd
 	if strings.TrimSpace(apiKeyCmd) == "" {
 		apiKeyCmd = ""
+	}
+	// api_keys only adds fallbacks behind whichever key is primary. It fills
+	// the primary slot itself only when neither api_key nor api_key_cmd is set,
+	// so a secret-manager command keeps its place in the precedence.
+	fallbackTokens := collectFallbackKeys(apiKey, entry.APIKeys)
+	if apiKey == "" && apiKeyCmd == "" && len(fallbackTokens) > 0 {
+		apiKey, fallbackTokens = fallbackTokens[0], fallbackTokens[1:]
 	}
 	switch {
 	case apiKey != "":
@@ -479,6 +482,27 @@ func tryProviderConfig(cfg configFile, modelOverride string) (ResolvedEndpoint, 
 				return ResolvedEndpoint{}, false, fmt.Errorf("provider %q: %w", cfg.Provider, err)
 			}
 			protocol = normalized
+		}
+		// A preset that serves model families over different wire protocols
+		// picks the protocol from the model, unless the entry pins one. This
+		// runs before ambient auth is derived so that follows the protocol in
+		// force. The model is the one resolution ends on: validation below can
+		// only reject it, never change it.
+		if entry.Protocol == "" {
+			effectiveModel := modelOverride
+			if effectiveModel == "" {
+				effectiveModel = entry.Model
+			}
+			if effectiveModel == "" {
+				effectiveModel = cfg.Model
+			}
+			if p, ok := preset.ModelProtocols[effectiveModel]; ok {
+				normalized := NormalizeProtocol(p)
+				if err := ValidateProtocol(normalized); err != nil {
+					return ResolvedEndpoint{}, false, fmt.Errorf("provider %q: model %q: %w", cfg.Provider, effectiveModel, err)
+				}
+				protocol = normalized
+			}
 		}
 	} else {
 		// Custom provider: protocol is always required; model can come from
@@ -558,14 +582,6 @@ func tryProviderConfig(cfg configFile, modelOverride string) (ResolvedEndpoint, 
 
 	if model == "" {
 		return ResolvedEndpoint{}, false, fmt.Errorf("provider %q has no model configured; run 'ocr config model' to select one or pass --model", cfg.Provider)
-	}
-
-	// A preset that serves model families over different wire protocols picks
-	// the protocol from the model, unless the entry pins one explicitly.
-	if isPreset && entry.Protocol == "" {
-		if p, ok := preset.ModelProtocols[model]; ok {
-			protocol = p
-		}
 	}
 
 	if protocol == ProtocolAnthropic {

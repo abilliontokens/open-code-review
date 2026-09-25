@@ -82,8 +82,10 @@ errors, such as a 401 for a rejected key, do not switch keys.
 ocr config set providers.opencode-go.api_keys "$KEY_1,$KEY_2,$KEY_3"
 ```
 
-`api_key`, when set, is tried first, followed by `api_keys` in order.
-`api_keys` works on built-in and custom providers alike.
+The primary key is `api_key`, or the output of `api_key_cmd` when that is
+set instead, and `api_keys` follow it in order. With neither set, the first
+entry of `api_keys` is the primary. `api_keys` works on built-in and custom
+providers alike.
 
 ### OpenCode Go
 

@@ -74,7 +74,7 @@ ocr config set providers.anthropic.api_key sk-ant-xxxxxxxxxx
 ocr config set providers.opencode-go.api_keys "$KEY_1,$KEY_2,$KEY_3"
 ```
 
-`api_key`가 설정되어 있으면 가장 먼저 사용하고, 이어서 `api_keys`를 순서대로 사용합니다. `api_keys`는 내장 프로바이더와 사용자 정의 프로바이더 모두에서 동작합니다.
+가장 먼저 사용하는 키는 `api_key`이며, 대신 `api_key_cmd`를 설정했다면 그 출력이고, 이어서 `api_keys`를 순서대로 사용합니다. 둘 다 없으면 `api_keys`의 첫 항목이 첫 키가 됩니다. `api_keys`는 내장 프로바이더와 사용자 정의 프로바이더 모두에서 동작합니다.
 
 ### OpenCode Go {#opencode-go}
 

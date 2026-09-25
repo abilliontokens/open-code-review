@@ -165,3 +165,19 @@ func TestResolveEndpoint_APIKeysOnCustomProvider(t *testing.T) {
 		t.Errorf("keys = %q + %q, want k1 + [k2]", ep.Token, ep.FallbackTokens)
 	}
 }
+
+// api_keys adds fallbacks behind api_key_cmd rather than displacing it: the
+// failing command surfacing proves it ran instead of api_keys[0] being
+// promoted over it.
+func TestResolveEndpoint_APIKeysDoNotShadowAPIKeyCmd(t *testing.T) {
+	clearAllEnv(t)
+	path, _ := writeResolverConfig(t, configFile{
+		Provider: "opencode-go",
+		Providers: map[string]providerEntryConfig{"opencode-go": {
+			APIKeyCmd: "exit 3", APIKeys: []string{"k1"}, Model: "kimi-k3",
+		}},
+	})
+	if ep, err := ResolveEndpoint(path); err == nil {
+		t.Fatalf("resolved with token %q, want the api_key_cmd failure", ep.Token)
+	}
+}

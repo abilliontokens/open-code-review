@@ -424,10 +424,10 @@ var registry = []Provider{
 		// Go routes and caches per conversation from x-opencode-session, and
 		// its Messages endpoint only reads the key from x-api-key.
 		Name:        "opencode-go",
-		AuthHeader:  "x-api-key",
 		DisplayName: "OpenCode Go",
 		Protocol:    ProtocolOpenAIChatCompletions,
 		BaseURL:     "https://opencode.ai/zen/go/v1",
+		AuthHeader:  "x-api-key",
 		EnvVar:      "OPENCODE_API_KEY",
 		ExtraHeaders: map[string]string{
 			"x-opencode-session": SessionKeyTemplateVar,
