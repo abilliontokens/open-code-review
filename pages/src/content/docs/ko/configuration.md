@@ -86,13 +86,7 @@ ocr config set model                            deepseek-v4.1-flash
 ocr config set providers.opencode-go.api_keys   "$GO_KEY_1,$GO_KEY_2"
 ```
 
-OCR은 리뷰의 세션 ID를 `x-opencode-session`으로 보내며, Go는 이를 라우팅과 프롬프트 캐싱에 사용합니다. 프리셋은 Chat Completions를 사용합니다. Go가 Messages API(MiniMax, Qwen)나 Responses API(Grok, GPT, Muse Spark)로 제공하는 모델은 프로토콜을 바꾸고 모델을 목록에 추가해야 합니다:
-
-```bash
-ocr config set providers.opencode-go.protocol anthropic
-ocr config set providers.opencode-go.models   qwen3.8-max
-ocr config set model                          qwen3.8-max
-```
+OCR은 리뷰의 세션 ID를 `x-opencode-session`으로 보내며, Go는 이를 라우팅과 프롬프트 캐싱에 사용합니다. Go는 모델 계열마다 서로 다른 API로 제공하며, OCR은 모델에 따라 프로토콜을 고릅니다. 대부분은 Chat Completions, MiniMax와 Qwen은 Messages API, Grok·GPT·Muse Spark는 Responses API입니다. `providers.opencode-go.protocol`을 설정하면 모든 모델에 그 프로토콜이 고정됩니다.
 
 ### 내장 프로바이더의 Base URL 재정의 {#overriding-a-built-in-provider-s-base-url}
 

@@ -98,15 +98,10 @@ ocr config set providers.opencode-go.api_keys   "$GO_KEY_1,$GO_KEY_2"
 ```
 
 OCR sends the review's session ID in `x-opencode-session`, which Go uses for
-routing and prompt caching. The preset speaks Chat Completions. Models that Go
-serves over the Messages API (MiniMax, Qwen) or the Responses API (Grok, GPT,
-Muse Spark) need the protocol switched and the model added to the list:
-
-```bash
-ocr config set providers.opencode-go.protocol anthropic
-ocr config set providers.opencode-go.models   qwen3.8-max
-ocr config set model                          qwen3.8-max
-```
+routing and prompt caching. Go serves each model family over its own API, and
+OCR picks the protocol from the model: Chat Completions for most, the Messages
+API for MiniMax and Qwen, and the Responses API for Grok, GPT and Muse Spark.
+Setting `providers.opencode-go.protocol` pins one protocol for every model.
 
 ### Overriding a built-in provider's Base URL
 

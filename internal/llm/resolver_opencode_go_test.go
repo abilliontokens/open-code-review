@@ -10,7 +10,6 @@ import (
 
 func TestResolveEndpoint_OpenCodeGoPresetHeaders(t *testing.T) {
 	clearAllEnv(t)
-	t.Setenv("OPENCODE_API_KEY", "")
 
 	t.Run("preset session header applies by default", func(t *testing.T) {
 		path, _ := writeResolverConfig(t, configFile{
@@ -52,6 +51,64 @@ func TestResolveEndpoint_OpenCodeGoPresetHeaders(t *testing.T) {
 			t.Error("resolving mutated the registry's preset headers")
 		}
 	})
+}
+
+func TestResolveEndpoint_OpenCodeGoRoutesProtocolByModel(t *testing.T) {
+	clearAllEnv(t)
+	tests := []struct {
+		model, entryProtocol, wantProtocol, wantURL, wantAuth string
+	}{
+		{"kimi-k3", "", ProtocolOpenAIChatCompletions, "https://opencode.ai/zen/go/v1", ""},
+		{"grok-4.7", "", ProtocolOpenAIResponses, "https://opencode.ai/zen/go/v1", ""},
+		{"qwen3.8-max", "", ProtocolAnthropic, "https://opencode.ai/zen/go/v1/messages", "x-api-key"},
+		{"qwen3.8-max", "openai", ProtocolOpenAIChatCompletions, "https://opencode.ai/zen/go/v1", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model+"/"+tt.entryProtocol, func(t *testing.T) {
+			path, _ := writeResolverConfig(t, configFile{
+				Provider: "opencode-go",
+				Providers: map[string]providerEntryConfig{"opencode-go": {
+					APIKey: "sk-go", Model: tt.model, Protocol: tt.entryProtocol,
+				}},
+			})
+			ep, err := ResolveEndpoint(path)
+			if err != nil {
+				t.Fatalf("ResolveEndpoint: %v", err)
+			}
+			if ep.Protocol != tt.wantProtocol || ep.URL != tt.wantURL || ep.AuthHeader != tt.wantAuth {
+				t.Errorf("endpoint = %s %s auth=%q, want %s %s auth=%q", ep.Protocol, ep.URL, ep.AuthHeader, tt.wantProtocol, tt.wantURL, tt.wantAuth)
+			}
+		})
+	}
+
+	t.Run("--model override picks its own protocol", func(t *testing.T) {
+		path, _ := writeResolverConfig(t, configFile{
+			Provider:  "opencode-go",
+			Providers: map[string]providerEntryConfig{"opencode-go": {APIKey: "sk-go", Model: "kimi-k3"}},
+		})
+		ep, err := ResolveEndpointWithModelOverride(path, "gpt-6-luna")
+		if err != nil {
+			t.Fatalf("ResolveEndpoint: %v", err)
+		}
+		if ep.Protocol != ProtocolOpenAIResponses {
+			t.Errorf("Protocol = %s, want %s", ep.Protocol, ProtocolOpenAIResponses)
+		}
+	})
+}
+
+// A routed model missing from Models could not be picked in the TUI or passed
+// with --model, since the list gates overrides.
+func TestProviders_ModelProtocolsAreListedAndValid(t *testing.T) {
+	for _, p := range ListProviders() {
+		for model, protocol := range p.ModelProtocols {
+			if !ModelListContains(p.Models, model) {
+				t.Errorf("%s: routed model %q is not in Models", p.Name, model)
+			}
+			if err := ValidateProtocol(protocol); err != nil {
+				t.Errorf("%s: model %q: %v", p.Name, model, err)
+			}
+		}
+	}
 }
 
 func TestResolveEndpoint_APIKeysOrderAndPromotion(t *testing.T) {

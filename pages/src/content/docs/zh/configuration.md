@@ -87,13 +87,7 @@ ocr config set model                            deepseek-v4.1-flash
 ocr config set providers.opencode-go.api_keys   "$GO_KEY_1,$GO_KEY_2"
 ```
 
-OCR 会在 `x-opencode-session` 中发送本次审查的会话 ID，Go 用它进行路由和提示词缓存。该预设使用 Chat Completions 协议。Go 通过 Messages API（MiniMax、Qwen）或 Responses API（Grok、GPT、Muse Spark）提供的模型，需要切换协议并把模型加入列表：
-
-```bash
-ocr config set providers.opencode-go.protocol anthropic
-ocr config set providers.opencode-go.models   qwen3.8-max
-ocr config set model                          qwen3.8-max
-```
+OCR 会在 `x-opencode-session` 中发送本次审查的会话 ID，Go 用它进行路由和提示词缓存。Go 以不同的 API 提供各个模型系列，OCR 会根据模型选择协议：大多数模型使用 Chat Completions，MiniMax 和 Qwen 使用 Messages API，Grok、GPT 和 Muse Spark 使用 Responses API。设置 `providers.opencode-go.protocol` 会让所有模型固定使用该协议。
 
 ### 覆盖内置 provider 的 Base URL
 

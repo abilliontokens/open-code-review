@@ -88,13 +88,7 @@ ocr config set model                            deepseek-v4.1-flash
 ocr config set providers.opencode-go.api_keys   "$GO_KEY_1,$GO_KEY_2"
 ```
 
-OCR はレビューのセッション ID を `x-opencode-session` で送信し、Go はこれをルーティングとプロンプトキャッシュに使います。プリセットは Chat Completions を使います。Go が Messages API（MiniMax、Qwen）や Responses API（Grok、GPT、Muse Spark）で提供するモデルは、プロトコルを切り替え、モデルをリストに追加してください：
-
-```bash
-ocr config set providers.opencode-go.protocol anthropic
-ocr config set providers.opencode-go.models   qwen3.8-max
-ocr config set model                          qwen3.8-max
-```
+OCR はレビューのセッション ID を `x-opencode-session` で送信し、Go はこれをルーティングとプロンプトキャッシュに使います。Go はモデルファミリーごとに異なる API で提供しており、OCR はモデルからプロトコルを選びます。多くのモデルは Chat Completions、MiniMax と Qwen は Messages API、Grok・GPT・Muse Spark は Responses API です。`providers.opencode-go.protocol` を設定すると、すべてのモデルでそのプロトコルに固定されます。
 
 ### 組み込み provider の Base URL を上書きする
 

@@ -560,6 +560,14 @@ func tryProviderConfig(cfg configFile, modelOverride string) (ResolvedEndpoint, 
 		return ResolvedEndpoint{}, false, fmt.Errorf("provider %q has no model configured; run 'ocr config model' to select one or pass --model", cfg.Provider)
 	}
 
+	// A preset that serves model families over different wire protocols picks
+	// the protocol from the model, unless the entry pins one explicitly.
+	if isPreset && entry.Protocol == "" {
+		if p, ok := preset.ModelProtocols[model]; ok {
+			protocol = p
+		}
+	}
+
 	if protocol == ProtocolAnthropic {
 		var err error
 		ah := "authorization"

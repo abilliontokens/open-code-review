@@ -93,13 +93,7 @@ ocr config set model                            deepseek-v4.1-flash
 ocr config set providers.opencode-go.api_keys   "$GO_KEY_1,$GO_KEY_2"
 ```
 
-OCR передаёт идентификатор сессии ревью в `x-opencode-session`, который Go использует для маршрутизации и кеширования промптов. Пресет работает по протоколу Chat Completions. Для моделей, которые Go отдаёт через Messages API (MiniMax, Qwen) или Responses API (Grok, GPT, Muse Spark), нужно сменить протокол и добавить модель в список:
-
-```bash
-ocr config set providers.opencode-go.protocol anthropic
-ocr config set providers.opencode-go.models   qwen3.8-max
-ocr config set model                          qwen3.8-max
-```
+OCR передаёт идентификатор сессии ревью в `x-opencode-session`, который Go использует для маршрутизации и кеширования промптов. Go отдаёт каждое семейство моделей через свой API, и OCR выбирает протокол по модели: Chat Completions для большинства, Messages API для MiniMax и Qwen, Responses API для Grok, GPT и Muse Spark. Если задать `providers.opencode-go.protocol`, этот протокол будет использоваться для всех моделей.
 
 ### Переопределение Base URL встроенного провайдера
 
