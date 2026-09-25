@@ -27,6 +27,11 @@ type Provider struct {
 	EnvVar      string // environment variable name for API key fallback
 	Models      []string
 
+	// ExtraHeaders are sent with every request to this preset, beneath the
+	// entry's own extra_headers, which win on a key clash. Values may use
+	// SessionKeyTemplateVar.
+	ExtraHeaders map[string]string
+
 	// AmbientAuth marks a provider whose credentials come from the
 	// environment's own chain rather than an api_key — AWS SigV4, for
 	// instance. The resolver skips its api_key requirement for these, because
@@ -408,6 +413,40 @@ var registry = []Provider{
 		},
 	},
 	{
+		// OpenCode Go serves each model family on a different wire protocol.
+		// The preset lists the Chat Completions models; the Messages-API and
+		// Responses-API models need providers.opencode-go.protocol set to
+		// "anthropic" or "openai-responses" and the model added to models.
+		// Go routes and caches per conversation from x-opencode-session.
+		Name:        "opencode-go",
+		DisplayName: "OpenCode Go",
+		Protocol:    ProtocolOpenAIChatCompletions,
+		BaseURL:     "https://opencode.ai/zen/go/v1",
+		EnvVar:      "OPENCODE_API_KEY",
+		ExtraHeaders: map[string]string{
+			"x-opencode-session": SessionKeyTemplateVar,
+		},
+		Models: []string{
+			"glm-5.3",
+			"glm-5.3-flash",
+			"glm-5.2",
+			"glm-5.1",
+			"kimi-k3",
+			"kimi-k2.7-code",
+			"kimi-k2.6",
+			"deepseek-v4-pro",
+			"deepseek-v4.1-flash",
+			"deepseek-v4-flash",
+			"mimo-v2.6-pro",
+			"mimo-v2.6-flash",
+			"mimo-v2.5-pro",
+			"mimo-v2.5",
+			"longcat-2.0",
+			"hy4-preview",
+			"hy3",
+		},
+	},
+	{
 		Name:        "novita",
 		DisplayName: "Novita API",
 		Protocol:    ProtocolOpenAIChatCompletions,
@@ -535,6 +574,13 @@ func copyProvider(p Provider) Provider {
 		models := make([]string, len(p.Models))
 		copy(models, p.Models)
 		p.Models = models
+	}
+	if p.ExtraHeaders != nil {
+		headers := make(map[string]string, len(p.ExtraHeaders))
+		for k, v := range p.ExtraHeaders {
+			headers[k] = v
+		}
+		p.ExtraHeaders = headers
 	}
 	return p
 }

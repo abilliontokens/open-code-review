@@ -574,6 +574,13 @@ func tryProviderConfig(cfg configFile, modelOverride string) (ResolvedEndpoint, 
 
 	extraBody = entry.ExtraBody
 	extraHeaders := entry.ExtraHeaders
+	if isPreset && len(preset.ExtraHeaders) > 0 {
+		merged := preset.ExtraHeaders
+		for k, v := range entry.ExtraHeaders {
+			merged[k] = v
+		}
+		extraHeaders = merged
+	}
 
 	timeout, err := ValidateTimeoutSec(entry.TimeoutSec)
 	if err != nil {
