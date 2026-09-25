@@ -283,6 +283,7 @@ func TestCloneProviderEntry_NilExtraBody(t *testing.T) {
 func TestCloneProviderEntry_CopiesEveryField(t *testing.T) {
 	orig := ProviderEntry{
 		APIKey:       "key",
+		APIKeys:      []string{"key-2"},
 		APIKeyCmd:    "op read op://dev/x/api-key",
 		URL:          "http://localhost",
 		Protocol:     "openai",

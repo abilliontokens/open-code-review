@@ -18,15 +18,18 @@ import (
 
 // ResolvedEndpoint holds the resolved LLM endpoint configuration.
 type ResolvedEndpoint struct {
-	URL          string
-	Token        string
-	Model        string
-	Provider     string
-	Protocol     string            // canonical protocol name (see protocol.go); resolver normalizes aliases
-	AuthHeader   string            // Anthropic auth header: "x-api-key" or "authorization"
-	Source       string            // human-readable config source label
-	ExtraBody    map[string]any    // vendor-specific request body fields
-	ExtraHeaders map[string]string // extra HTTP headers for the LLM request
+	URL   string
+	Token string
+	// FallbackTokens are further keys for the same provider, tried in order
+	// after Token when a request hits a usage limit.
+	FallbackTokens []string
+	Model          string
+	Provider       string
+	Protocol       string            // canonical protocol name (see protocol.go); resolver normalizes aliases
+	AuthHeader     string            // Anthropic auth header: "x-api-key" or "authorization"
+	Source         string            // human-readable config source label
+	ExtraBody      map[string]any    // vendor-specific request body fields
+	ExtraHeaders   map[string]string // extra HTTP headers for the LLM request
 	// Timeout is the per-request HTTP timeout; 0 means use the client default (5 min).
 	// Only config file (llm/provider sections) and OCR_LLM_TIMEOUT env var can set this.
 	// tryCCEnv and tryShellRC always leave it at 0 since those sources have no timeout
@@ -339,6 +342,7 @@ type llmFileConfig struct {
 // providerEntryConfig represents a single provider entry in config.json.
 type providerEntryConfig struct {
 	APIKey       string            `json:"api_key,omitempty"`
+	APIKeys      []string          `json:"api_keys,omitempty"`    // further keys, tried in order after api_key when one hits a usage limit
 	APIKeyCmd    string            `json:"api_key_cmd,omitempty"` // shell command whose stdout is the api key; used when api_key is empty
 	URL          string            `json:"url,omitempty"`
 	Protocol     string            `json:"protocol,omitempty"`
@@ -424,6 +428,10 @@ func tryProviderConfig(cfg configFile, modelOverride string) (ResolvedEndpoint, 
 	apiKey := entry.APIKey
 	if strings.TrimSpace(apiKey) == "" {
 		apiKey = ""
+	}
+	fallbackTokens := collectFallbackKeys(apiKey, entry.APIKeys)
+	if apiKey == "" && len(fallbackTokens) > 0 {
+		apiKey, fallbackTokens = fallbackTokens[0], fallbackTokens[1:]
 	}
 	// Same rule for the command: `sh -c "   "` exits 0 with no output, so a
 	// whitespace-only api_key_cmd would suppress the env fallback and then fail
@@ -610,22 +618,42 @@ func tryProviderConfig(cfg configFile, modelOverride string) (ResolvedEndpoint, 
 		apiKey = resolved
 	}
 
+	if ambientAuth || len(fallbackTokens) == 0 {
+		fallbackTokens = nil
+	}
 	return ResolvedEndpoint{
-		URL:          url,
-		Token:        apiKey,
-		Model:        model,
-		Provider:     cfg.Provider,
-		Protocol:     protocol,
-		AuthHeader:   authHeader,
-		Source:       "provider:" + cfg.Provider,
-		ExtraBody:    extraBody,
-		ExtraHeaders: extraHeaders,
-		Timeout:      timeout,
-		RetryCodes:   retryCodes,
-		AmbientAuth:  ambientAuth,
-		AWSProfile:   entry.AWSProfile,
-		AWSRegion:    entry.AWSRegion,
+		URL:            url,
+		Token:          apiKey,
+		FallbackTokens: fallbackTokens,
+		Model:          model,
+		Provider:       cfg.Provider,
+		Protocol:       protocol,
+		AuthHeader:     authHeader,
+		Source:         "provider:" + cfg.Provider,
+		ExtraBody:      extraBody,
+		ExtraHeaders:   extraHeaders,
+		Timeout:        timeout,
+		RetryCodes:     retryCodes,
+		AmbientAuth:    ambientAuth,
+		AWSProfile:     entry.AWSProfile,
+		AWSRegion:      entry.AWSRegion,
 	}, true, nil
+}
+
+// collectFallbackKeys returns the api_keys entries that add a key beyond
+// primary, in order. Whitespace-only entries are typos and a repeated key would
+// only replay the limit it just hit, so both are dropped.
+func collectFallbackKeys(primary string, keys []string) []string {
+	var out []string
+	seen := map[string]bool{primary: true}
+	for _, k := range keys {
+		if strings.TrimSpace(k) == "" || seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, k)
+	}
+	return out
 }
 
 // tryLegacyLlmConfig resolves an endpoint from the legacy llm config block.

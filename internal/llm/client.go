@@ -352,14 +352,17 @@ type FunctionDef struct {
 
 // ClientConfig holds configuration for connecting to an LLM service.
 type ClientConfig struct {
-	URL          string            // Full API endpoint URL
-	APIKey       string            // Bearer token / API key
-	Model        string            // Default model override
-	AuthHeader   string            // Auth header name: "x-api-key", "authorization", or empty for protocol default
-	Timeout      time.Duration     // Request timeout
-	ExtraBody    map[string]any    // Vendor-specific fields merged into every request body
-	ExtraHeaders map[string]string // Extra HTTP headers sent with every request
-	RetryCodes   []int             // Additional HTTP status codes that trigger retry
+	URL    string // Full API endpoint URL
+	APIKey string // Bearer token / API key
+	// FallbackAPIKeys are tried in order after APIKey when the provider
+	// reports a usage limit; see keyFailoverMiddleware.
+	FallbackAPIKeys []string
+	Model           string            // Default model override
+	AuthHeader      string            // Auth header name: "x-api-key", "authorization", or empty for protocol default
+	Timeout         time.Duration     // Request timeout
+	ExtraBody       map[string]any    // Vendor-specific fields merged into every request body
+	ExtraHeaders    map[string]string // Extra HTTP headers sent with every request
+	RetryCodes      []int             // Additional HTTP status codes that trigger retry
 	// SessionKey is the fallback prompt-cache affinity key
 	// for requests whose context carries none (see ContextWithSessionKey).
 	//
@@ -435,18 +438,19 @@ func retryCodesMiddleware(codes []int) func(*http.Request, func(*http.Request) (
 // parameters rather than fields on ResolvedEndpoint.
 func NewLLMClient(ep ResolvedEndpoint, collector *RetryCollector, raw *RawHolder) LLMClient {
 	cfg := ClientConfig{
-		URL:            ep.URL,
-		APIKey:         ep.Token,
-		Model:          ep.Model,
-		AuthHeader:     ep.AuthHeader,
-		Timeout:        ep.Timeout,
-		ExtraBody:      ep.ExtraBody,
-		ExtraHeaders:   ep.ExtraHeaders,
-		RetryCodes:     ep.RetryCodes,
-		retryCollector: collector,
-		rawHolder:      raw,
-		AWSProfile:     ep.AWSProfile,
-		AWSRegion:      ep.AWSRegion,
+		URL:             ep.URL,
+		APIKey:          ep.Token,
+		FallbackAPIKeys: ep.FallbackTokens,
+		Model:           ep.Model,
+		AuthHeader:      ep.AuthHeader,
+		Timeout:         ep.Timeout,
+		ExtraBody:       ep.ExtraBody,
+		ExtraHeaders:    ep.ExtraHeaders,
+		RetryCodes:      ep.RetryCodes,
+		retryCollector:  collector,
+		rawHolder:       raw,
+		AWSProfile:      ep.AWSProfile,
+		AWSRegion:       ep.AWSRegion,
 	}
 	switch ep.Protocol {
 	case ProtocolAnthropic:
@@ -558,6 +562,9 @@ func NewOpenAIClient(cfg ClientConfig) *OpenAIClient {
 		openaiopt.WithHeader("User-Agent", userAgent("")),
 		openaiopt.WithRequestTimeout(cfg.Timeout),
 		openaiopt.WithHTTPClient(httpClientWithHeaderTimeout(cfg.Timeout)),
+	}
+	if mw := keyFailoverFor(cfg, ""); mw != nil {
+		opts = append(opts, openaiopt.WithMiddleware(mw))
 	}
 	if mw := retryCodesMiddleware(cfg.RetryCodes); mw != nil {
 		opts = append(opts, openaiopt.WithMiddleware(mw))
@@ -1149,6 +1156,9 @@ func NewAnthropicClient(cfg ClientConfig) *AnthropicClient {
 		)
 	}
 
+	if mw := keyFailoverFor(cfg, authHeader); mw != nil {
+		opts = append(opts, option.WithMiddleware(mw))
+	}
 	if mw := retryCodesMiddleware(cfg.RetryCodes); mw != nil {
 		opts = append(opts, option.WithMiddleware(mw))
 	}

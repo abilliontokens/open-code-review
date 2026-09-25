@@ -1290,6 +1290,7 @@ func (m providerTUIModel) applyCreateCustomProvider() (tea.Model, tea.Cmd) {
 func cloneProviderEntry(v ProviderEntry) ProviderEntry {
 	out := ProviderEntry{
 		APIKey:     v.APIKey,
+		APIKeys:    append([]string(nil), v.APIKeys...),
 		APIKeyCmd:  v.APIKeyCmd,
 		URL:        v.URL,
 		Protocol:   v.Protocol,
